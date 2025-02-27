@@ -5,43 +5,45 @@ $(document).ready(function() {
     d, h, m,
     i = 0;
 
-  $(window).load(function() {
+  $(window).on('load', function() {
     $messages.mCustomScrollbar();
     insertResponseMessage('Hi there, I\'m your personal Concierge. How can I help?');
   });
 
   function updateScrollbar() {
-    $messages.mCustomScrollbar("update").mCustomScrollbar('scrollTo', 'bottom', {
+    $messages.mCustomScrollbar("update");
+    $messages.mCustomScrollbar("scrollTo", "bottom", {
       scrollInertia: 10,
       timeout: 0
     });
   }
 
   function setDate() {
-    d = new Date()
+    d = new Date();
     if (m != d.getMinutes()) {
       m = d.getMinutes();
-      $('<div class="timestamp">' + d.getHours() + ':' + m + '</div>').appendTo($('.message:last'));
+      $('<div class="timestamp">' + d.getHours() + ':' + (m < 10 ? '0' + m : m) + '</div>').appendTo($('.message:last'));
     }
   }
 
   function callChatbotApi(message) {
-    // params, body, additionalParams
-    return sdk.chatbotPost({}, {
-      messages: [{
-        type: 'unstructured',
-        unstructured: {
-          text: message
-        }
-      }]
+    var apigClient = apigClientFactory.newClient();
+    return apigClient.diningbotPost({}, {
+        messages: [{
+            type: 'unstructured',
+            unstructured: {
+                text: message
+            }
+        }]
     }, {});
-  }
+}
 
   function insertMessage() {
-    msg = $('.message-input').val();
-    if ($.trim(msg) == '') {
+    let msg = $('.message-input').val().trim();
+    if (msg === '') {
       return false;
     }
+
     $('<div class="message message-personal">' + msg + '</div>').appendTo($('.mCSB_container')).addClass('new');
     setDate();
     $('.message-input').val(null);
@@ -49,40 +51,42 @@ $(document).ready(function() {
 
     callChatbotApi(msg)
       .then((response) => {
-        console.log(response);
+        console.log("API Response:", response);
+
         var data = response.data;
+        var body = JSON.parse(data.body); 
 
-        if (data.messages && data.messages.length > 0) {
-          console.log('received ' + data.messages.length + ' messages');
+        if (body.response && body.response.length > 0) {
+          console.log('Received ' + body.response.length + ' messages');
 
-          var messages = data.messages;
-
-          for (var message of messages) {
+          body.response.forEach((message) => {
             if (message.type === 'unstructured') {
-              insertResponseMessage(message.unstructured.text);
+              let html = `
+                <div class="message-content">
+                  <b>${message.unstructured.text}</b>
+                </div>`;
+              insertResponseMessage(html);
             } else if (message.type === 'structured' && message.structured.type === 'product') {
-              var html = '';
-
-              insertResponseMessage(message.structured.text);
-
-              setTimeout(function() {
-                html = '<img src="' + message.structured.payload.imageUrl + '" witdth="200" height="240" class="thumbnail" /><b>' +
-                  message.structured.payload.name + '<br>$' +
-                  message.structured.payload.price +
-                  '</b><br><a href="#" onclick="' + message.structured.payload.clickAction + '()">' +
-                  message.structured.payload.buttonLabel + '</a>';
-                insertResponseMessage(html);
-              }, 1100);
-            } else {
-              console.log('not implemented');
+              let html = `
+                <img src="${message.structured.payload.imageUrl}" width="200" height="240" class="thumbnail" />
+                <b>${message.structured.payload.name}<br>$${message.structured.payload.price}</b><br>
+                <a href="#" onclick="${message.structured.payload.clickAction}()">
+                  ${message.structured.payload.buttonLabel}
+                </a>`;
+              insertResponseMessage(html);
+            } 
+            else if (typeof message === 'string') {  // Handling generic text responses
+              insertResponseMessage(message);}
+            else {
+              console.log('Not implemented:', message);
             }
-          }
+          });
         } else {
           insertResponseMessage('Oops, something went wrong. Please try again.');
         }
       })
       .catch((error) => {
-        console.log('an error occurred', error);
+        console.log('An error occurred:', error);
         insertResponseMessage('Oops, something went wrong. Please try again.');
       });
   }
@@ -96,7 +100,7 @@ $(document).ready(function() {
       insertMessage();
       return false;
     }
-  })
+  });
 
   function insertResponseMessage(content) {
     $('<div class="message loading new"><figure class="avatar"><img src="https://media.tenor.com/images/4c347ea7198af12fd0a66790515f958f/tenor.gif" /></figure><span></span></div>').appendTo($('.mCSB_container'));
@@ -110,5 +114,4 @@ $(document).ready(function() {
       i++;
     }, 500);
   }
-
 });
